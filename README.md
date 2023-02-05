@@ -1,3 +1,13 @@
+# 初めに
+
+これは [FakeByte/EpicOnlineTranport](https://github.com/FakeByte/EpicOnlineTransport) のForkリポジトリです。  
+元リポジトリが最新のMirrorの更新に対応していない為、こちらで対応をしています。  
+元リポジトリではEOS SDKを含めていましたが、C#SDKのUnity対応は[eos_plugin_for_unity](https://github.com/PlayEveryWare/eos_plugin_for_unity)に任せているため、  
+このリポジトリでは削除をしています。
+
+以下の文章は基本的にメンテナンスをしていないため、ほぼ元リポジトリのままです。  
+時間ができ次第こちらは更新をしていきます。
+
 # EpicOnlineTransport for Mirror
 
 Hi! 
@@ -7,7 +17,8 @@ This is our [Epic Online Services](https://dev.epicgames.com/en-US/services) (EO
 
 ## Dependencies
 - Mirror ([Documentation](https://mirror-networking.gitbook.io/docs/))
-- Epic Online Services C# SDK ([Documentation](https://dev.epicgames.com/docs/services/en-US/index.html))
+- eos_plugin_for_unity ([Github Repository](https://github.com/PlayEveryWare/eos_plugin_for_unity))
+
 
 ## Setting Up Epic Online Services and Obtaining API Keys
 1. Login to the [Epic Games Dev Portal](https://dev.epicgames.com/portal) with an Epic Games Account
