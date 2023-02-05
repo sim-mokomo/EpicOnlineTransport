@@ -1,9 +1,9 @@
 ﻿using Epic.OnlineServices;
 using Epic.OnlineServices.P2P;
-using Mirror;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using PlayEveryWare.EpicOnlineServices;
 using UnityEngine;
 
 namespace EpicTransport {
@@ -53,7 +53,7 @@ namespace EpicTransport {
                 connectedComplete = new TaskCompletionSource<Task>();
 
                 OnConnected += SetConnectedComplete;
-
+                
                 SendInternal(hostProductId, socketId, InternalMessages.CONNECT);
 
                 Task connectedCompleteTask = connectedComplete.Task;
@@ -113,23 +113,26 @@ namespace EpicTransport {
             OnReceivedData.Invoke(data, channel);
         }
 
-        protected override void OnNewConnection(OnIncomingConnectionRequestInfo result) {
+        protected override void OnNewConnection(ref OnIncomingConnectionRequestInfo result) {
             if (ignoreAllMessages) {
                 return;
             }
 
-            if (deadSockets.Contains(result.SocketId.SocketName)) {
+            if (result.SocketId != null && deadSockets.Contains(result.SocketId.Value.SocketName)) {
                 Debug.LogError("Received incoming connection request from dead socket");
                 return;
             }
 
-            if (hostProductId == result.RemoteUserId) {
-                EOSSDKComponent.GetP2PInterface().AcceptConnection(
-                    new AcceptConnectionOptions() {
-                        LocalUserId = EOSSDKComponent.LocalUserProductId,
-                        RemoteUserId = result.RemoteUserId,
-                        SocketId = result.SocketId
-                    });
+            if (hostProductId == result.RemoteUserId)
+            {
+                var eosManager = EOSManager.Instance;
+                var options = new AcceptConnectionOptions()
+                {
+                    LocalUserId = eosManager.GetProductUserId(),
+                    RemoteUserId = result.RemoteUserId,
+                    SocketId = result.SocketId
+                };
+                eosManager.GetEOSP2PInterface().AcceptConnection(ref options);
             } else {
                 Debug.LogError("P2P Acceptance Request from unknown host ID.");
             }

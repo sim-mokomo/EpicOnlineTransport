@@ -7,6 +7,7 @@ using Epic.OnlineServices;
 using Mirror;
 using Epic.OnlineServices.Metrics;
 using System.Collections;
+using PlayEveryWare.EpicOnlineServices;
 
 namespace EpicTransport {
 
@@ -40,7 +41,7 @@ namespace EpicTransport {
         public ProductUserId productUserId;
 
         private int packetId = 0;
-                
+
         private void Awake() {
             Debug.Assert(Channels != null && Channels.Length > 0, "No channel configured for EOS Transport.");
             Debug.Assert(Channels.Length < byte.MaxValue, "Too many channels configured for EOS Transport");
@@ -57,7 +58,7 @@ namespace EpicTransport {
         }
 
         public override void ClientEarlyUpdate() {
-            EOSSDKComponent.Tick();
+            EOSManager.Instance.Tick();
 
             if (activeNode != null) {
                 ignoreCachedMessagesTimer += Time.deltaTime;
@@ -68,7 +69,8 @@ namespace EpicTransport {
                     activeNode.ignoreAllMessages = false;
 
                     if (client != null && !client.isConnecting) {
-                        if (EOSSDKComponent.Initialized) {
+                        if (EOSManager.Instance.IsLoggedIn())
+                        {
                             client.Connect(client.hostAddress);
                         } else {
                             Debug.LogError("EOS not initialized");
@@ -87,7 +89,7 @@ namespace EpicTransport {
         public override void ClientLateUpdate() {}
 
         public override void ServerEarlyUpdate() {
-            EOSSDKComponent.Tick();
+            EOSManager.Instance.Tick();
 
             if (activeNode != null) {
                 ignoreCachedMessagesTimer += Time.deltaTime;
@@ -108,7 +110,7 @@ namespace EpicTransport {
 
         public override bool ClientConnected() => ClientActive() && client.Connected;
         public override void ClientConnect(string address) {
-            if (!EOSSDKComponent.Initialized) {
+            if (!EOSManager.Instance.IsLoggedIn()) {
                 Debug.LogError("EOS not initialized. Client could not be started.");
                 OnClientDisconnected.Invoke();
                 return;
@@ -127,15 +129,17 @@ namespace EpicTransport {
                 client = Client.CreateClient(this, address);
                 activeNode = client;
 
-                if (EOSSDKComponent.CollectPlayerMetrics) {
+                var eosManager = EOSManager.Instance;
+                if (eosManager.EnableCollectPlayerMetrics()) {
                     // Start Metrics colletion session
                     BeginPlayerSessionOptions sessionOptions = new BeginPlayerSessionOptions();
-                    sessionOptions.AccountId = EOSSDKComponent.LocalUserAccountId;
+                    sessionOptions.AccountId = eosManager.GetLocalUserId();
                     sessionOptions.ControllerType = UserControllerType.Unknown;
-                    sessionOptions.DisplayName = EOSSDKComponent.DisplayName;
+                    sessionOptions.DisplayName = eosManager.GetDisplayUserName();
                     sessionOptions.GameSessionId = null;
                     sessionOptions.ServerIp = null;
-                    Result result = EOSSDKComponent.GetMetricsInterface().BeginPlayerSession(sessionOptions);
+                    
+                    Result result = eosManager.GetEOSMetricsInterface().BeginPlayerSession(ref sessionOptions);
 
                     if(result == Result.Success) {
                         Debug.Log("Started Metric Session");
@@ -153,7 +157,7 @@ namespace EpicTransport {
             ClientConnect(uri.Host);
         }
 
-        public override void ClientSend(ArraySegment<byte> segment, int channelId) {
+        public override void ClientSend(ArraySegment<byte> segment, int channelId = Mirror.Channels.Reliable) {
             Send(channelId, segment);
         }
 
@@ -166,8 +170,10 @@ namespace EpicTransport {
 
 
         public override bool ServerActive() => server != null;
-        public override void ServerStart() {
-            if (!EOSSDKComponent.Initialized) {
+        public override void ServerStart()
+        {
+            var eosManager = EOSManager.Instance;
+            if (!eosManager.IsLoggedIn()) {
                 Debug.LogError("EOS not initialized. Server could not be started.");
                 return;
             }
@@ -185,15 +191,15 @@ namespace EpicTransport {
                 server = Server.CreateServer(this, NetworkManager.singleton.maxConnections);
                 activeNode = server;
 
-                if (EOSSDKComponent.CollectPlayerMetrics) {
+                if (eosManager.EnableCollectPlayerMetrics()) {
                     // Start Metrics colletion session
                     BeginPlayerSessionOptions sessionOptions = new BeginPlayerSessionOptions();
-                    sessionOptions.AccountId = EOSSDKComponent.LocalUserAccountId;
+                    sessionOptions.AccountId = eosManager.GetLocalUserId();
                     sessionOptions.ControllerType = UserControllerType.Unknown;
-                    sessionOptions.DisplayName = EOSSDKComponent.DisplayName;
+                    sessionOptions.DisplayName = eosManager.GetDisplayUserName();
                     sessionOptions.GameSessionId = null;
                     sessionOptions.ServerIp = null;
-                    Result result = EOSSDKComponent.GetMetricsInterface().BeginPlayerSession(sessionOptions);
+                    Result result = eosManager.GetEOSMetricsInterface().BeginPlayerSession(ref sessionOptions);
 
                     if (result == Result.Success) {
                         Debug.Log("Started Metric Session");
@@ -204,16 +210,18 @@ namespace EpicTransport {
             }
         }
 
-        public override Uri ServerUri() {
+        public override Uri ServerUri()
+        {
+            EOSManager.Instance.GetProductUserId().ToString(out var productUserIdString);
             UriBuilder epicBuilder = new UriBuilder { 
                 Scheme = EPIC_SCHEME,
-                Host = EOSSDKComponent.LocalUserProductIdString
+                Host = productUserIdString
             };
 
             return epicBuilder.Uri;
         }
 
-        public override void ServerSend(int connectionId, ArraySegment<byte> segment, int channelId) {
+        public override void ServerSend(int connectionId, ArraySegment<byte> segment, int channelId = Mirror.Channels.Reliable) {
             if (ServerActive()) {
                 Send( channelId, segment, connectionId);
             }
@@ -231,12 +239,6 @@ namespace EpicTransport {
 
             for(int i  = 0; i < packets.Length; i++) {
                 if (connectionId == int.MinValue) {
-                    if (client == null)
-                    {
-                        OnClientDisconnected.Invoke();
-                        return;
-                    }
-                    
                     client.Send(packets[i].ToBytes(), channelId);
                 } else {
                     server.SendAll(connectionId, packets[i].ToBytes(), channelId);
@@ -264,12 +266,14 @@ namespace EpicTransport {
             return packets;
         }
 
-        public override void Shutdown() {
-            if (EOSSDKComponent.CollectPlayerMetrics) {
+        public override void Shutdown()
+        {
+            var eosManager = EOSManager.Instance;
+            if (eosManager.EnableCollectPlayerMetrics()) {
                 // Stop Metrics collection session
                 EndPlayerSessionOptions endSessionOptions = new EndPlayerSessionOptions();
-                endSessionOptions.AccountId = EOSSDKComponent.LocalUserAccountId;
-                Result result = EOSSDKComponent.GetMetricsInterface().EndPlayerSession(endSessionOptions);
+                endSessionOptions.AccountId = EOSManager.Instance.GetLocalUserId();
+                Result result = eosManager.GetEOSMetricsInterface().EndPlayerSession(ref endSessionOptions);
 
                 if (result == Result.Success) {
                     Debug.LogError("Stopped Metric Session");
@@ -287,35 +291,36 @@ namespace EpicTransport {
 
         public int GetMaxSinglePacketSize(int channelId) => P2PInterface.MaxPacketSize - 10; // 1159 bytes, we need to remove 10 bytes for the packet header (id (4 bytes) + fragment (4 bytes) + more fragments (1 byte)) 
 
-        public override int GetMaxPacketSize(int channelId) => P2PInterface.MaxPacketSize * maxFragments; 
-
-        public override int GetBatchThreshold(int channelId) => P2PInterface.MaxPacketSize; // Use P2PInterface.MaxPacketSize as everything above will get fragmentated and will be counter effective to batching
+        public override int GetMaxPacketSize(int channelId) => P2PInterface.MaxPacketSize * maxFragments;
 
         public override bool Available() {
             try {
-                return EOSSDKComponent.Initialized;
+                return EOSManager.Instance.IsLoggedIn();
             } catch {
                 return false;
             }
         }
 
-        private IEnumerator FetchEpicAccountId() {
-            while (!EOSSDKComponent.Initialized) {
+        private IEnumerator FetchEpicAccountId()
+        {
+            var eosManager = EOSManager.Instance;
+            while (!eosManager.IsLoggedIn()) {
                 yield return null;
             }
 
-            productUserId = EOSSDKComponent.LocalUserProductId;
+            productUserId = eosManager.GetProductUserId();
         }
 
         private IEnumerator ChangeRelayStatus() {
-            while (!EOSSDKComponent.Initialized) {
+            var eosManager = EOSManager.Instance;
+            while (!eosManager.IsLoggedIn()) {
                 yield return null;
             }
 
             SetRelayControlOptions setRelayControlOptions = new SetRelayControlOptions();
             setRelayControlOptions.RelayControl = relayControl;
-
-            EOSSDKComponent.GetP2PInterface().SetRelayControl(setRelayControlOptions);
+            
+            eosManager.GetEOSP2PInterface().SetRelayControl(ref setRelayControlOptions);
         }
 
         public void ResetIgnoreMessagesAtStartUpTimer() {

@@ -4,6 +4,7 @@ using Epic.OnlineServices.P2P;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using PlayEveryWare.EpicOnlineServices;
 using UnityEngine;
 
 namespace EpicTransport {
@@ -41,22 +42,32 @@ namespace EpicTransport {
 
             deadSockets = new List<string>();
 
+            var eosManager = EOSManager.Instance;
+            var localProductUserId = eosManager.GetProductUserId();
             AddNotifyPeerConnectionRequestOptions addNotifyPeerConnectionRequestOptions = new AddNotifyPeerConnectionRequestOptions();
-            addNotifyPeerConnectionRequestOptions.LocalUserId = EOSSDKComponent.LocalUserProductId;
+            addNotifyPeerConnectionRequestOptions.LocalUserId = localProductUserId;
             addNotifyPeerConnectionRequestOptions.SocketId = null;
 
             OnIncomingConnectionRequest += OnNewConnection;
             OnRemoteConnectionClosed += OnConnectFail;
 
-            incomingNotificationId = EOSSDKComponent.GetP2PInterface().AddNotifyPeerConnectionRequest(addNotifyPeerConnectionRequestOptions,
-                null, OnIncomingConnectionRequest);
+            var p2PInterface = eosManager.GetEOSP2PInterface();
+            incomingNotificationId = p2PInterface
+                .AddNotifyPeerConnectionRequest(
+                    ref addNotifyPeerConnectionRequestOptions,
+                    null,
+                    OnIncomingConnectionRequest
+                );
 
             AddNotifyPeerConnectionClosedOptions addNotifyPeerConnectionClosedOptions = new AddNotifyPeerConnectionClosedOptions();
-            addNotifyPeerConnectionClosedOptions.LocalUserId = EOSSDKComponent.LocalUserProductId;
+            addNotifyPeerConnectionClosedOptions.LocalUserId = localProductUserId;
             addNotifyPeerConnectionClosedOptions.SocketId = null;
 
-            outgoingNotificationId = EOSSDKComponent.GetP2PInterface().AddNotifyPeerConnectionClosed(addNotifyPeerConnectionClosedOptions,
-                null, OnRemoteConnectionClosed);
+            outgoingNotificationId = p2PInterface.AddNotifyPeerConnectionClosed(
+                ref addNotifyPeerConnectionClosedOptions,
+                null,
+                OnRemoteConnectionClosed
+            );
 
             if (outgoingNotificationId == 0 || incomingNotificationId == 0) {
                 Debug.LogError("Couldn't bind notifications with P2P interface");
@@ -68,16 +79,18 @@ namespace EpicTransport {
 
         }
 
-        protected void Dispose() {
-            EOSSDKComponent.GetP2PInterface().RemoveNotifyPeerConnectionRequest(incomingNotificationId);
-            EOSSDKComponent.GetP2PInterface().RemoveNotifyPeerConnectionClosed(outgoingNotificationId);
+        protected void Dispose()
+        {
+            var p2PInterface = EOSManager.Instance.GetEOSP2PInterface();
+            p2PInterface.RemoveNotifyPeerConnectionRequest(incomingNotificationId);
+            p2PInterface.RemoveNotifyPeerConnectionClosed(outgoingNotificationId);
 
             transport.ResetIgnoreMessagesAtStartUpTimer();
         }
 
-        protected abstract void OnNewConnection(OnIncomingConnectionRequestInfo result);
+        protected abstract void OnNewConnection(ref OnIncomingConnectionRequestInfo result);
 
-        private void OnConnectFail(OnRemoteConnectionClosedInfo result) {
+        private void OnConnectFail(ref OnRemoteConnectionClosedInfo result) {
             if (ignoreAllMessages) {
                 return;
             }
@@ -111,29 +124,36 @@ namespace EpicTransport {
             }
         }
 
-        protected void SendInternal(ProductUserId target, SocketId socketId, InternalMessages type) {
-            EOSSDKComponent.GetP2PInterface().SendPacket(new SendPacketOptions() {
+        protected void SendInternal(ProductUserId target, SocketId socketId, InternalMessages type)
+        {
+            var eosManager = EOSManager.Instance;
+            var options = new SendPacketOptions()
+            {
                 AllowDelayedDelivery = true,
-                Channel = (byte) internal_ch,
-                Data = new byte[] { (byte) type },
-                LocalUserId = EOSSDKComponent.LocalUserProductId,
+                Channel = (byte)internal_ch,
+                Data = new byte[] { (byte)type },
+                LocalUserId = eosManager.GetProductUserId(),
                 Reliability = PacketReliability.ReliableOrdered,
                 RemoteUserId = target,
                 SocketId = socketId
-            });
+            };
+            eosManager.GetEOSP2PInterface().SendPacket(ref options);
         }
 
 
         protected void Send(ProductUserId host, SocketId socketId, byte[] msgBuffer, byte channel) {
-            Result result = EOSSDKComponent.GetP2PInterface().SendPacket(new SendPacketOptions() {
+            var eosManager = EOSManager.Instance;
+            var options = new SendPacketOptions()
+            {
                 AllowDelayedDelivery = true,
                 Channel = channel,
                 Data = msgBuffer,
-                LocalUserId = EOSSDKComponent.LocalUserProductId,
+                LocalUserId = eosManager.GetProductUserId(),
                 Reliability = channels[channel],
                 RemoteUserId = host,
                 SocketId = socketId
-            });
+            };
+            Result result = eosManager.GetEOSP2PInterface().SendPacket(ref options);
 
             if(result != Result.Success) {
                 Debug.LogError("Send failed " + result);
@@ -141,13 +161,27 @@ namespace EpicTransport {
         }
 
         private bool Receive(out ProductUserId clientProductUserId, out SocketId socketId, out byte[] receiveBuffer, byte channel) {
-            Result result = EOSSDKComponent.GetP2PInterface().ReceivePacket(new ReceivePacketOptions() {
-                LocalUserId = EOSSDKComponent.LocalUserProductId,
+            var eosManager = EOSManager.Instance;
+            var options = new ReceivePacketOptions()
+            {
+                LocalUserId = eosManager.GetProductUserId(),
                 MaxDataSizeBytes = P2PInterface.MaxPacketSize,
                 RequestedChannel = channel
-            }, out clientProductUserId, out socketId, out channel, out receiveBuffer);
+            };
+            
+            var outData = new ArraySegment<byte>(new byte[P2PInterface.MaxPacketSize]);
+            Result result = eosManager.GetEOSP2PInterface().ReceivePacket(
+                ref options,
+                out clientProductUserId,
+                out socketId,
+                out channel,
+                outData,
+                out var outBytesWritten
+            );
 
-            if (result == Result.Success) {
+            if (result == Result.Success)
+            {
+                receiveBuffer = outData.Slice(0, (int)outBytesWritten).ToArray();
                 return true;
             }
 
@@ -157,7 +191,7 @@ namespace EpicTransport {
         }
 
         protected virtual void CloseP2PSessionWithUser(ProductUserId clientUserID, SocketId socketId) {
-            if (socketId == null) {
+            if (socketId.SocketName == string.Empty) {
                 Debug.LogWarning("Socket ID == null | " + ignoreAllMessages);
                 return;
             }
@@ -263,8 +297,8 @@ namespace EpicTransport {
 
                             OnReceiveData(data, keyValuePair.Key.productUserId, keyValuePair.Key.channel);
 
-                            if(transport.ServerActive() || transport.ClientActive())
-                                emptyPacketLists.Add(keyValuePair.Value[packetList]);
+                            //keyValuePair.Value[packetList].Clear();
+                            emptyPacketLists.Add(keyValuePair.Value[packetList]);
                         }
                     }
 
