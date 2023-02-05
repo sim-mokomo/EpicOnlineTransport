@@ -1,0 +1,18 @@
+{
+    "name": "Mirror.Transport.EpicOnlineTransport",
+    "rootNamespace": "",
+    "references": [
+        "GUID:30817c1a0e6d646d99c048fc403f5979",
+        "GUID:eca75dae05cc04997af51c9220796e70",
+        "GUID:22a3316d24a1c40399333f8b5badff47"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
