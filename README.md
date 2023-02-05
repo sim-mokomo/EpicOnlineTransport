@@ -5,6 +5,19 @@
 元リポジトリではEOS SDKを含めていましたが、C#SDKのUnity対応は[eos_plugin_for_unity](https://github.com/PlayEveryWare/eos_plugin_for_unity)に任せているため、  
 このリポジトリでは削除をしています。
 
+# 利用方法
+
+アセット `Mirror` を import 後、`Mirror/Transport` ディレクトリ直下に本リポジトリのサブモジュールを作成。
+
+```
+git submodule add git@github.com:sim-mokomo/EpicOnlineTransport.git
+```
+
+`Mirror.Transports.asmdef` の Assembly Definition References に `Mirror.Transport.EpicOnlineTransport` を追加。 
+
+
+# READMEについて
+
 以下の文章は基本的にメンテナンスをしていないため、ほぼ元リポジトリのままです。  
 時間ができ次第こちらは更新をしていきます。
 
