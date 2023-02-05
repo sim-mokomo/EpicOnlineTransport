@@ -2,7 +2,7 @@
 
 これは [FakeByte/EpicOnlineTranport](https://github.com/FakeByte/EpicOnlineTransport) のForkリポジトリです。  
 元リポジトリが最新のMirrorの更新に対応していない為、こちらで対応をしています。  
-元リポジトリではEOS SDKを含めていましたが、C#SDKのUnity対応は[eos_plugin_for_unity](https://github.com/PlayEveryWare/eos_plugin_for_unity)に任せているため、  
+元リポジトリではEOS SDKを含めていましたが、C#SDKのUnity対応は[sim-mokomo/eos_plugin_for_unity](https://github.com/sim-mokomo/eos_plugin_for_unity)に任せているため、  
 このリポジトリでは削除をしています。
 
 # 利用方法
